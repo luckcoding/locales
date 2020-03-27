@@ -43,37 +43,44 @@ module.exports = function (app, options) {
     localeDirs.push(localeDir);
   }
 
-  for (let i = 0; i < localeDirs.length; i++) {
-    const dir = localeDirs[i];
+  function setResources() {
+    for (let i = 0; i < localeDirs.length; i++) {
+      const dir = localeDirs[i];
 
-    if (!fs.existsSync(dir)) {
-      continue;
-    }
-
-    const names = fs.readdirSync(dir);
-    for (let j = 0; j < names.length; j++) {
-      const name = names[j];
-      const filepath = path.join(dir, name);
-      // support en_US.js => en-US.js
-      const locale = formatLocale(name.split('.')[0]);
-      let resource = {};
-
-      if (name.endsWith('.js') || name.endsWith('.json')) {
-        resource = flattening(require(filepath));
-      } else if (name.endsWith('.properties')) {
-        resource = ini.parse(fs.readFileSync(filepath, 'utf8'));
+      if (!fs.existsSync(dir)) {
+        continue;
       }
 
-      resources[locale] = resources[locale] || {};
-      assign(resources[locale], resource);
+      const names = fs.readdirSync(dir);
+      for (let j = 0; j < names.length; j++) {
+        const name = names[j];
+        const filepath = path.join(dir, name);
+        // support en_US.js => en-US.js
+        const locale = formatLocale(name.split('.')[0]);
+        let resource = {};
+
+        if (name.endsWith('.js') || name.endsWith('.json')) {
+          delete require.cache[require.resolve(filepath)];
+          resource = flattening(require(filepath));
+        } else if (name.endsWith('.properties')) {
+          resource = ini.parse(fs.readFileSync(filepath, 'utf8'));
+        }
+
+        resources[locale] = resources[locale] || {};
+        assign(resources[locale], resource);
+      }
     }
   }
+
+  setResources();
 
   debug('Init locales with %j, got %j resources', options, Object.keys(resources));
 
   if (typeof app[functionName] !== 'undefined') {
     console.warn('[koa-locales] will override exists "%s" function on app', functionName);
   }
+
+  app.context.__reload = setResources;
 
   function gettext(locale, key, value) {
     if (arguments.length === 0 || arguments.length === 1) {
